@@ -2,26 +2,25 @@ import speech_recognition as sr
 
 def recognize_speech():
     r = sr.Recognizer()
-
-    with sr.Microphone() as source:
-        r.adjust_for_ambient_noise(source)
-
-        while True:
+    while True:
+        with sr.Microphone() as source:
+            r.pause_threshold = 1
+            r.adjust_for_ambient_noise(source)
+            print("Listening...")
             audio = r.listen(source)
+        try:
+            print("Recognizing...")
+            query= r.recognize_google(audio,language= 'en-in')
+            words = query.split()
+            for word in words:
+                print(word)
+            if "stop" in words:
+                print("Stop word detected. Exiting...")
+                break
+            with open("recognized.txt", "a") as file:
+                file.write(query + "\n")
 
-            try:
-                text = r.recognize_google(audio)
+        except Exception as e:
+            print("Miss stark couldn't recognize what you said, speak once more.")
 
-                words = text.split()
-                for word in words:
-                    print(word)
-                if "stop" in words:
-                    print("Stop word detected. Exiting...")
-                    break
-
-            except sr.UnknownValueError:
-                print("Could not understand audio.")
-            except sr.RequestError as e:
-                print("Error: {0}".format(e))
-
-recognize_speech()
+recognize_speech() 
