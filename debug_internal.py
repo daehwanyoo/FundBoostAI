@@ -1,6 +1,8 @@
 import speech_recognition as sr
 import pyaudio
 
+#testing: https://www.youtube.com/watch?v=lhFU5H5KPFE
+
 # Initialize recognizer
 recognizer = sr.Recognizer()
 
