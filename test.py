@@ -1,94 +1,86 @@
+import pyaudio
 import sounddevice as sd
 import numpy as np
 import speech_recognition as sr
-import time
 import threading
 
 # Initialize recognizer
 recognizer = sr.Recognizer()
 
-# Duration for checking audio silence
-LISTEN_DURATION = 5  # seconds
+# Function to list available audio devices for internal audio (pyaudio)
+def list_audio_devices():
+    p = pyaudio.PyAudio()
+    device_list = []
+    print("Available audio devices:")
+    for i in range(p.get_device_count()):
+        device_info = p.get_device_info_by_index(i)
+        device_list.append(device_info)
+        print(f"{i}: {device_info['name']}")
+    return device_list
 
-# Threshold for detecting sound in the computer audio (adjust based on your environment)
-COMPUTER_AUDIO_THRESHOLD = 0.02
-
-# Initialize global flags for both audio sources
-detected_computer_audio = False
-detected_microphone_audio = False
-
-def check_computer_audio(device_index):
-    """Captures audio from the system's internal virtual audio stream and prints the detected audio levels."""
-    global detected_computer_audio
-
-    def callback(indata, frames, time, status):
-        volume_norm = np.linalg.norm(indata) * 10  # normalize audio input
-        print(f"[DEBUG] Computer audio volume: {volume_norm}")  # print audio level
-        if volume_norm > COMPUTER_AUDIO_THRESHOLD:
-            detected_computer_audio = True
-
-    try:
-        with sd.InputStream(device=device_index, channels=1, callback=callback):
-            sd.sleep(1000)  # Capture for 1 second
-    except Exception as e:
-        print(f"[ERROR] Failed to capture computer audio: {e}")
-
-def microphone_speech_to_text(mic_device_index):
-    """Handles capturing and recognizing audio from the microphone."""
-    global detected_microphone_audio
-    with sr.Microphone(device_index=mic_device_index) as source:
+# Function to capture and process microphone audio
+def microphone_speech_to_text():
+    """Captures audio from microphone and performs speech-to-text"""
+    with sr.Microphone() as source:
         recognizer.adjust_for_ambient_noise(source)
         print("Microphone is ready, start speaking...")
 
         while True:
-            print("[DEBUG] Listening for microphone audio...")
             try:
-                audio = recognizer.listen(source, timeout=LISTEN_DURATION)
-                detected_microphone_audio = True
-
-                # Recognize speech from the microphone
+                print("Listening for microphone audio...")
+                audio = recognizer.listen(source, timeout=5)
+                # Recognize speech from microphone
                 text = recognizer.recognize_google(audio)
-                print(f"Sound in Device (microphone): {text}")
-
+                print(f"Microphone detected: {text}")
             except sr.UnknownValueError:
                 print("Could not understand the audio from microphone.")
             except sr.RequestError as e:
                 print(f"Could not request results from microphone; {e}")
             except sr.WaitTimeoutError:
-                print("No sound detected from the microphone.")
+                print("No sound detected from microphone.")
 
-def computer_audio_to_text(internal_audio_device_index):
-    """Handles recognizing audio from the internal computer audio (virtual device)."""
-    global detected_computer_audio
+# Function to capture and process system audio from selected device
+def system_audio_speech_to_text(device_index, channels=2):
+    """Captures system audio from the selected device and performs speech-to-text"""
+    def callback(indata, frames, time, status):
+        volume_norm = np.linalg.norm(indata) * 10  # Normalize the audio input
+        print(f"[DEBUG] System audio volume: {volume_norm}")
+        if volume_norm > 0.01:  # Adjust this threshold if necessary
+            print("System audio detected!")
+            try:
+                audio_data = sr.AudioData(indata.tobytes(), 16000, channels)
+                text = recognizer.recognize_google(audio_data)
+                print(f"Recognized system audio: {text}")
+            except sr.UnknownValueError:
+                print("System audio could not be understood.")
+            except sr.RequestError as e:
+                print(f"Could not request results from Google Speech API; {e}")
 
-    while True:
-        print("[DEBUG] Listening for computer audio...")
-        check_computer_audio(internal_audio_device_index)
-        if detected_computer_audio:
-            print("[DEBUG] Sound in computer detected. Processing...")
-            print("Sound in computer: <Transcribed internal audio content>")
-            detected_computer_audio = False  # Reset after detection
+    try:
+        with sd.InputStream(device=device_index, channels=channels, callback=callback):
+            print(f"Listening for system audio on device {device_index} (channels={channels})...")
+            sd.sleep(10000)  # Capture for 10 seconds
+    except Exception as e:
+        print(f"[ERROR] Failed to capture system audio: {e}")
 
-def main(mic_device_index, internal_audio_device_index):
-    # Create threads for microphone and internal audio processing
-    mic_thread = threading.Thread(target=microphone_speech_to_text, args=(mic_device_index,))
-    computer_audio_thread = threading.Thread(target=computer_audio_to_text, args=(internal_audio_device_index,))
+def start_audio_capture():
+    # Step 1: List available audio devices for system audio capture
+    devices = list_audio_devices()
 
-    # Start both threads
+    # Step 2: Ask the user to choose the device index for internal system audio
+    selected_device_index = int(input("Enter the index of the audio device you want to use for system audio: "))
+
+    # Step 3: Create threads for both microphone and system audio
+    mic_thread = threading.Thread(target=microphone_speech_to_text)
+    system_audio_thread = threading.Thread(target=system_audio_speech_to_text, args=(selected_device_index, 2))
+
+    # Step 4: Start both threads
     mic_thread.start()
-    computer_audio_thread.start()
+    system_audio_thread.start()
 
-    # Join the threads (wait for them to complete)
+    # Step 5: Join the threads to make them run simultaneously
     mic_thread.join()
-    computer_audio_thread.join()
+    system_audio_thread.join()
 
 if __name__ == "__main__":
-    # Get the indices for microphone and virtual audio device (system audio)
-    mic_device_index = None  # None defaults to the system microphone
-    internal_audio_device_index = 1  # Replace with the correct index for your virtual device
-
-    # Check available devices
-    print("Available audio devices:")
-    print(sd.query_devices())
-
-    main(mic_device_index, internal_audio_device_index)
+    start_audio_capture()
