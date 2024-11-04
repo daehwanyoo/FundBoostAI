@@ -15,6 +15,9 @@ def microphone_speech_to_text():
                 # Recognize speech from microphone
                 text = recognizer.recognize_google(audio)
                 print(f"Microphone detected: {text}")
+                # Write the recognized text to file for main.py to process
+                with open("speech_to_text.txt", "a") as f:
+                    f.write(f"Me (caller): {text}\n")
             except sr.UnknownValueError:
                 print("Could not understand the audio from microphone.")
             except sr.RequestError as e:

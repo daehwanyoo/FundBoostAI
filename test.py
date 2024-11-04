@@ -1,86 +1,39 @@
-import pyaudio
-import sounddevice as sd
-import numpy as np
-import speech_recognition as sr
-import threading
+from openai import OpenAI
 
-# Initialize recognizer
-recognizer = sr.Recognizer()
+import time
 
-# Function to list available audio devices for internal audio (pyaudio)
-def list_audio_devices():
-    p = pyaudio.PyAudio()
-    device_list = []
-    print("Available audio devices:")
-    for i in range(p.get_device_count()):
-        device_info = p.get_device_info_by_index(i)
-        device_list.append(device_info)
-        print(f"{i}: {device_info['name']}")
-    return device_list
+# OpenAI API key
 
-# Function to capture and process microphone audio
-def microphone_speech_to_text():
-    """Captures audio from microphone and performs speech-to-text"""
-    with sr.Microphone() as source:
-        recognizer.adjust_for_ambient_noise(source)
-        print("Microphone is ready, start speaking...")
 
-        while True:
-            try:
-                print("Listening for microphone audio...")
-                audio = recognizer.listen(source, timeout=5)
-                # Recognize speech from microphone
-                text = recognizer.recognize_google(audio)
-                print(f"Microphone detected: {text}")
-            except sr.UnknownValueError:
-                print("Could not understand the audio from microphone.")
-            except sr.RequestError as e:
-                print(f"Could not request results from microphone; {e}")
-            except sr.WaitTimeoutError:
-                print("No sound detected from microphone.")
-
-# Function to capture and process system audio from selected device
-def system_audio_speech_to_text(device_index, channels=2):
-    """Captures system audio from the selected device and performs speech-to-text"""
-    def callback(indata, frames, time, status):
-        volume_norm = np.linalg.norm(indata) * 10  # Normalize the audio input
-        print(f"[DEBUG] System audio volume: {volume_norm}")
-        if volume_norm > 0.01:  # Adjust this threshold if necessary
-            print("System audio detected!")
-            try:
-                audio_data = sr.AudioData(indata.tobytes(), 16000, channels)
-                text = recognizer.recognize_google(audio_data)
-                print(f"Recognized system audio: {text}")
-            except sr.UnknownValueError:
-                print("System audio could not be understood.")
-            except sr.RequestError as e:
-                print(f"Could not request results from Google Speech API; {e}")
-
+def read_latest_speech():
+    """Reads the latest line from the speech_to_text.txt file."""
     try:
-        with sd.InputStream(device=device_index, channels=channels, callback=callback):
-            print(f"Listening for system audio on device {device_index} (channels={channels})...")
-            sd.sleep(10000)  # Capture for 10 seconds
-    except Exception as e:
-        print(f"[ERROR] Failed to capture system audio: {e}")
+        with open("speech_to_text.txt", "r") as f:
+            lines = f.readlines()
+        if lines:
+            latest_text = lines[-1].strip()  # Get the latest line
+            return latest_text
+        return None
+    except FileNotFoundError:
+        print("The speech_to_text.txt file was not found.")
+        return None
 
-def start_audio_capture():
-    # Step 1: List available audio devices for system audio capture
-    devices = list_audio_devices()
-
-    # Step 2: Ask the user to choose the device index for internal system audio
-    selected_device_index = int(input("Enter the index of the audio device you want to use for system audio: "))
-
-    # Step 3: Create threads for both microphone and system audio
-    mic_thread = threading.Thread(target=microphone_speech_to_text)
-    system_audio_thread = threading.Thread(target=system_audio_speech_to_text, args=(selected_device_index, 2))
-
-    # Step 4: Start both threads
-    mic_thread.start()
-    system_audio_thread.start()
-
-    # Step 5: Join the threads to make them run simultaneously
-    mic_thread.join()
-    system_audio_thread.join()
+def analyze_text_with_openai(text):
+    """Analyze the user's latest response using OpenAI (using the new function-based API)."""
+    response = client.completions.create(model="gpt-3.5-turbo-instruct",  # Use the latest available model
+    prompt=f"The following is the latest transcript from me(caller) and donor response:\n'{text}'.\nEvaluate my words (caller) is appropriate or not. Respond with one word: 'Appropriate' or 'Inappropriate' and give me a sentence to improve for next one. Also, suggest the top 3 sentences that can be used to elicit a donation based on this context.",
+    max_tokens=150)
+    result = response.choices[0].text.strip()
+    return result
 
 if __name__ == "__main__":
-    start_audio_capture()
+    while True:
+        latest_text = read_latest_speech()
+        if latest_text:
+            print(f"Latest user input: {latest_text}")
+            result = analyze_text_with_openai(latest_text)
+            print(f"OpenAI evaluation:\n{result}")
+        else:
+            print("No new input found.")
+
+        time.sleep(5)  # Check for new input every 5 seconds

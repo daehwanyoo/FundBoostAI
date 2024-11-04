@@ -1,8 +1,6 @@
 import speech_recognition as sr
 import pyaudio
 
-#testing: https://www.youtube.com/watch?v=lhFU5H5KPFE
-
 # Initialize recognizer
 recognizer = sr.Recognizer()
 
@@ -30,6 +28,9 @@ def microphone_speech_to_text(device_index):
                 # Recognize speech from microphone
                 text = recognizer.recognize_google(audio)
                 print(f"Microphone detected: {text}")
+                # Write the recognized text to file for main.py to process
+                with open("speech_to_text.txt", "a") as f:
+                    f.write(f"Donor: {text}\n")
             except sr.UnknownValueError:
                 print("Could not understand the audio from microphone.")
             except sr.RequestError as e:
